@@ -17,25 +17,46 @@ app.use(express.json());
 app.use(cors());
 
 app.post("/api/v1/signup", async (req, res) => {
-    // TODO: zod validation , hash the password
-    const username = req.body.username;
-    const password = req.body.password;
+    const { username, password } = req.body;
+
+    // First, check if required fields are provided
+    if (!username || !password) {
+        return res.status(400).json({
+            message: "Username and password are required"
+        });
+    }
 
     try {
+        // Step 1: Explicitly check if a user with that username already exists
+        const existingUser = await UserModel.findOne({ username: username });
+
+        // Step 2: If a user is found, send a specific error and stop
+        if (existingUser) {
+            // 409 Conflict is a better status code for "already exists"
+            return res.status(409).json({
+                message: "User already exists"
+            });
+        }
+
+        // Step 3: If no user exists, proceed to create the new one
         await UserModel.create({
             username: username,
-            password: password
-        }) 
+            password: password // Note: This password should be hashed
+        });
 
-        res.json({
-            message: "User signed up"
-        })
-    } catch(e) {
-        res.status(411).json({
-            message: "User already exists"
-        })
+        // 201 Created is a good status code for a successful creation
+        res.status(201).json({
+            message: "User signed up successfully"
+        });
+
+    } catch (e) {
+        // This will now only catch unexpected server or database errors
+        console.error("Error during signup:", e);
+        res.status(500).json({
+            message: "An internal server error occurred"
+        });
     }
-})
+});
 
 app.post("/api/v1/signin", async (req, res) => {
     const username = req.body.username;
