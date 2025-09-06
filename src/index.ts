@@ -31,13 +31,15 @@ app.post("/api/v1/signup", async (req: Request, res: Response) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-        return res.status(400).json({ message: "Username and password are required" });
+        res.status(400).json({ message: "Username and password are required" });
+        return;
     }
 
     try {
         const existingUser = await UserModel.findOne({ username });
         if (existingUser) {
-            return res.status(409).json({ message: "Username already exists" });
+            res.status(409).json({ message: "Username already exists" });
+            return;
         }
 
         const saltRounds = 10;
@@ -47,14 +49,14 @@ app.post("/api/v1/signup", async (req: Request, res: Response) => {
             username: username,
             password: hashedPassword,
         });
-
-        // Removed 'return' to match expected 'void' return type
+        
         res.status(201).json({ message: "User signed up successfully" });
+        return;
 
     } catch (e) {
         console.error("Error during signup:", e);
-        // Removed 'return' from the final catch block response
         res.status(500).json({ message: "An internal server error occurred" });
+        return;
     }
 });
 
@@ -64,16 +66,25 @@ app.post("/api/v1/signin", async (req: Request, res: Response) => {
     try {
         const existingUser = await UserModel.findOne({ username });
 
-        if (existingUser && await bcrypt.compare(password, existingUser.password)) {
-            // Added '!' to assert JWT_SECRET is not undefined, fixing the TS2345 error
+        if (!existingUser || !existingUser.password) {
+            res.status(401).json({ message: "Invalid username or password" });
+            return;
+        }
+
+        const passwordMatch = await bcrypt.compare(password, existingUser.password);
+
+        if (passwordMatch) {
             const token = jwt.sign({ id: existingUser._id }, JWT_SECRET!); 
             res.json({ token });
+            return;
         } else {
             res.status(401).json({ message: "Invalid username or password" });
+            return;
         }
     } catch (e) {
         console.error("Error during signin:", e);
         res.status(500).json({ message: "An internal server error occurred" });
+        return;
     }
 });
 
@@ -89,9 +100,11 @@ app.post("/api/v1/content", userMiddleware, async (req: Request, res: Response) 
             tags: [],
         });
         res.json({ message: "Content added" });
+        return;
     } catch (e) {
         console.error("Error adding content:", e);
         res.status(500).json({ message: "Failed to add content" });
+        return;
     }
 });
 
@@ -100,9 +113,11 @@ app.get("/api/v1/content", userMiddleware, async (req: Request, res: Response) =
         const userId = req.userId;
         const content = await ContentModel.find({ userId: userId }).populate("userId", "username");
         res.json({ content });
+        return;
     } catch (e) {
         console.error("Error fetching content:", e);
         res.status(500).json({ message: "Failed to fetch content" });
+        return;
     }
 });
 
@@ -114,9 +129,11 @@ app.delete("/api/v1/content", userMiddleware, async (req: Request, res: Response
             userId: req.userId,
         });
         res.json({ message: "Deleted" });
+        return;
     } catch (e) {
         console.error("Error deleting content:", e);
         res.status(500).json({ message: "Failed to delete content" });
+        return;
     }
 });
 
@@ -129,7 +146,8 @@ app.post("/api/v1/brain/share", userMiddleware, async (req: Request, res: Respon
         if (share) {
             const existingLink = await LinkModel.findOne({ userId: req.userId });
             if (existingLink) {
-                return res.json({ hash: existingLink.hash }); // Early exit 'return' is OK
+                res.json({ hash: existingLink.hash });
+                return;
             }
             const hash = random(10);
             await LinkModel.create({
@@ -137,13 +155,16 @@ app.post("/api/v1/brain/share", userMiddleware, async (req: Request, res: Respon
                 hash: hash,
             });
             res.json({ hash });
+            return;
         } else {
             await LinkModel.deleteOne({ userId: req.userId });
             res.json({ message: "Removed link" });
+            return;
         }
     } catch (e) {
         console.error("Error updating share link:", e);
         res.status(500).json({ message: "Failed to update share settings" });
+        return;
     }
 });
 
@@ -153,12 +174,14 @@ app.get("/api/v1/brain/:shareLink", async (req: Request, res: Response) => {
         const link = await LinkModel.findOne({ hash });
 
         if (!link) {
-            return res.status(404).json({ message: "Share link not found" }); // Early exit 'return' is OK
+            res.status(404).json({ message: "Share link not found" });
+            return;
         }
 
         const user = await UserModel.findById(link.userId);
         if (!user) {
-            return res.status(404).json({ message: "Associated user not found" }); // Early exit 'return' is OK
+            res.status(404).json({ message: "Associated user not found" });
+            return;
         }
 
         const content = await ContentModel.find({ userId: link.userId });
@@ -166,9 +189,11 @@ app.get("/api/v1/brain/:shareLink", async (req: Request, res: Response) => {
             username: user.username,
             content: content,
         });
+        return;
     } catch (e) {
         console.error("Error fetching shared brain:", e);
         res.status(500).json({ message: "Failed to fetch shared content" });
+        return;
     }
 });
 
