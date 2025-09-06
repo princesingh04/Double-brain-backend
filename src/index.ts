@@ -1,10 +1,16 @@
 import express from "express";
+import mongoose from "mongoose";
 import { random } from "./utils";
 import jwt from "jsonwebtoken";
 import { ContentModel, LinkModel, UserModel } from "./db";
 import { JWT_PASSWORD } from "./config";
 import { userMiddleware } from "./middleware";
 import cors from "cors";
+import dotenv from "dotenv";
+dotenv.config();
+const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI as string;
+
 
 const app = express();
 app.use(express.json());
@@ -86,7 +92,7 @@ app.delete("/api/v1/content", userMiddleware, async (req, res) => {
     const contentId = req.body.contentId;
 
     await ContentModel.deleteMany({
-        contentId,
+        _id: contentId,  // This is the key change
         userId: req.userId
     })
 
@@ -94,7 +100,6 @@ app.delete("/api/v1/content", userMiddleware, async (req, res) => {
         message: "Deleted"
     })
 })
-
 app.post("/api/v1/brain/share", userMiddleware, async (req, res) => {
     const share = req.body.share;
     if (share) {
@@ -163,6 +168,15 @@ app.get("/api/v1/brain/:shareLink", async (req, res) => {
         content: content
     })
 
-})
-
-app.listen(3000);
+});
+mongoose
+  .connect(MONGO_URI)
+  .then(() => {
+    console.log("✅ Connected to MongoDB");
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  })
+  .catch((err: unknown) => {
+    console.error("❌ Error connecting to MongoDB:", err);
+  });
