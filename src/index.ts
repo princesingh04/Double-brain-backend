@@ -1,9 +1,9 @@
-import express, { Request, Response } from "express"; // Added Request, Response types
+import express, { Request, Response } from "express";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import cors from "cors";
 import dotenv from "dotenv";
-import bcrypt from "bcrypt"; // Added for password hashing
+import bcrypt from "bcrypt";
 
 import { ContentModel, LinkModel, UserModel } from "./db";
 import { userMiddleware } from "./middleware";
@@ -36,12 +36,10 @@ app.post("/api/v1/signup", async (req: Request, res: Response) => {
 
     try {
         const existingUser = await UserModel.findOne({ username });
-
         if (existingUser) {
             return res.status(409).json({ message: "Username already exists" });
         }
 
-        // --- Added password hashing ---
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -50,12 +48,13 @@ app.post("/api/v1/signup", async (req: Request, res: Response) => {
             password: hashedPassword,
         });
 
-        // --- Added 'return' to fix the TypeScript build error ---
-        return res.status(201).json({ message: "User signed up successfully" });
+        // Removed 'return' to match expected 'void' return type
+        res.status(201).json({ message: "User signed up successfully" });
 
     } catch (e) {
         console.error("Error during signup:", e);
-        return res.status(500).json({ message: "An internal server error occurred" });
+        // Removed 'return' from the final catch block response
+        res.status(500).json({ message: "An internal server error occurred" });
     }
 });
 
@@ -65,17 +64,16 @@ app.post("/api/v1/signin", async (req: Request, res: Response) => {
     try {
         const existingUser = await UserModel.findOne({ username });
 
-        // --- Using bcrypt.compare for secure password checking ---
         if (existingUser && await bcrypt.compare(password, existingUser.password)) {
-            const token = jwt.sign({ id: existingUser._id }, JWT_SECRET);
-            return res.json({ token });
+            // Added '!' to assert JWT_SECRET is not undefined, fixing the TS2345 error
+            const token = jwt.sign({ id: existingUser._id }, JWT_SECRET!); 
+            res.json({ token });
         } else {
-            // --- Changed status code to 401 for better security ---
-            return res.status(401).json({ message: "Invalid username or password" });
+            res.status(401).json({ message: "Invalid username or password" });
         }
     } catch (e) {
         console.error("Error during signin:", e);
-        return res.status(500).json({ message: "An internal server error occurred" });
+        res.status(500).json({ message: "An internal server error occurred" });
     }
 });
 
@@ -90,10 +88,10 @@ app.post("/api/v1/content", userMiddleware, async (req: Request, res: Response) 
             userId: req.userId,
             tags: [],
         });
-        return res.json({ message: "Content added" });
+        res.json({ message: "Content added" });
     } catch (e) {
         console.error("Error adding content:", e);
-        return res.status(500).json({ message: "Failed to add content" });
+        res.status(500).json({ message: "Failed to add content" });
     }
 });
 
@@ -101,24 +99,24 @@ app.get("/api/v1/content", userMiddleware, async (req: Request, res: Response) =
     try {
         const userId = req.userId;
         const content = await ContentModel.find({ userId: userId }).populate("userId", "username");
-        return res.json({ content });
+        res.json({ content });
     } catch (e) {
         console.error("Error fetching content:", e);
-        return res.status(500).json({ message: "Failed to fetch content" });
+        res.status(500).json({ message: "Failed to fetch content" });
     }
 });
 
 app.delete("/api/v1/content", userMiddleware, async (req: Request, res: Response) => {
     try {
         const contentId = req.body.contentId;
-        await ContentModel.deleteOne({ // Using deleteOne is more semantic for a single item
+        await ContentModel.deleteOne({
             _id: contentId,
             userId: req.userId,
         });
-        return res.json({ message: "Deleted" });
+        res.json({ message: "Deleted" });
     } catch (e) {
         console.error("Error deleting content:", e);
-        return res.status(500).json({ message: "Failed to delete content" });
+        res.status(500).json({ message: "Failed to delete content" });
     }
 });
 
@@ -131,21 +129,21 @@ app.post("/api/v1/brain/share", userMiddleware, async (req: Request, res: Respon
         if (share) {
             const existingLink = await LinkModel.findOne({ userId: req.userId });
             if (existingLink) {
-                return res.json({ hash: existingLink.hash });
+                return res.json({ hash: existingLink.hash }); // Early exit 'return' is OK
             }
             const hash = random(10);
             await LinkModel.create({
                 userId: req.userId,
                 hash: hash,
             });
-            return res.json({ hash });
+            res.json({ hash });
         } else {
             await LinkModel.deleteOne({ userId: req.userId });
-            return res.json({ message: "Removed link" });
+            res.json({ message: "Removed link" });
         }
     } catch (e) {
         console.error("Error updating share link:", e);
-        return res.status(500).json({ message: "Failed to update share settings" });
+        res.status(500).json({ message: "Failed to update share settings" });
     }
 });
 
@@ -155,25 +153,22 @@ app.get("/api/v1/brain/:shareLink", async (req: Request, res: Response) => {
         const link = await LinkModel.findOne({ hash });
 
         if (!link) {
-            // --- Changed status code to 404 Not Found for better semantics ---
-            return res.status(404).json({ message: "Share link not found" });
+            return res.status(404).json({ message: "Share link not found" }); // Early exit 'return' is OK
         }
 
         const user = await UserModel.findById(link.userId);
-
         if (!user) {
-            return res.status(404).json({ message: "Associated user not found" });
+            return res.status(404).json({ message: "Associated user not found" }); // Early exit 'return' is OK
         }
 
         const content = await ContentModel.find({ userId: link.userId });
-        return res.json({
+        res.json({
             username: user.username,
             content: content,
         });
-
     } catch (e) {
         console.error("Error fetching shared brain:", e);
-        return res.status(500).json({ message: "Failed to fetch shared content" });
+        res.status(500).json({ message: "Failed to fetch shared content" });
     }
 });
 
